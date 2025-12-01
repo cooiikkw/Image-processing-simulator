@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖片處理 - Gamma 與直方圖均衡</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+            margin: 20px;
+        }
+        canvas {
+            margin: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
+</head>
+<body>
+    <h1>影像色階與亮度強化器</h1>
+    <input type="file" id="fileInput" accept="image/*">
+    <br><br>
+    <label for="gammaInput">Gamma:</label>
+    <input type="number" id="gammaInput" min="0.1" max="5" step="0.1" value="1">
+    <button id="applyGamma">套用 Gamma</button>
+    <button id="applyHistogramEqualization">直方圖均衡</button>
+    <br><br>
+    <canvas id="originalCanvas"></canvas>
+    <canvas id="processedCanvas"></canvas>
+
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const gammaInput = document.getElementById('gammaInput');
+        const applyGammaButton = document.getElementById('applyGamma');
+        const applyHistogramButton = document.getElementById('applyHistogramEqualization');
+        const originalCanvas = document.getElementById('originalCanvas');
+        const processedCanvas = document.getElementById('processedCanvas');
+        const originalCtx = originalCanvas.getContext('2d');
+        const processedCtx = processedCanvas.getContext('2d');
+
+        fileInput.addEventListener('change', (event) => {
+            const file = event.target.files[0];
+            if (file) {
+                const img = new Image();
+                img.onload = () => {
+                    originalCanvas.width = img.width;
+                    originalCanvas.height = img.height;
+                    processedCanvas.width = img.width;
+                    processedCanvas.height = img.height;
+                    originalCtx.drawImage(img, 0, 0);
+                    processedCtx.drawImage(img, 0, 0);
+                };
+                img.src = URL.createObjectURL(file);
+            }
+        });
+
+        applyGammaButton.addEventListener('click', () => {
+            const gamma = parseFloat(gammaInput.value);
+            if (gamma <= 0) {
+                alert("Gamma 值必須大於 0");
+                return;
+            }
+            const imageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const data = imageData.data;
+
+            for (let i = 0; i < data.length; i += 4) {
+                data[i] = 255 * Math.pow(data[i] / 255, gamma);     // Red
+                data[i + 1] = 255 * Math.pow(data[i + 1] / 255, gamma); // Green
+                data[i + 2] = 255 * Math.pow(data[i + 2] / 255, gamma); // Blue
+            }
+
+            processedCtx.putImageData(imageData, 0, 0);
+        });
+
+        applyHistogramButton.addEventListener('click', () => {
+            const imageData = originalCtx.getImageData(0, 0, originalCanvas.width, originalCanvas.height);
+            const data = imageData.data;
+
+            // 計算直方圖
+            const histogram = new Array(256).fill(0);
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                histogram[gray]++;
+            }
+
+            // 累積分布函數 (CDF)
+            const cdf = [];
+            let cumulative = 0;
+            for (let i = 0; i < histogram.length; i++) {
+                cumulative += histogram[i];
+                cdf[i] = cumulative;
+            }
+
+            // 最小非零的 CDF 值
+            const cdfMin = cdf.find(value => value > 0);
+
+            // 應用直方圖均衡化公式
+            const totalPixels = originalCanvas.width * originalCanvas.height;
+            const equalizedLUT = cdf.map(value => Math.round(((value - cdfMin) / (totalPixels - cdfMin)) * 255));
+
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = Math.round(0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2]);
+                const equalized = equalizedLUT[gray];
+                data[i] = data[i + 1] = data[i + 2] = equalized; // 更新 RGB
+            }
+
+            processedCtx.putImageData(imageData, 0, 0);
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            text-align: center;
+        }
+        canvas {
+            margin-top: 20px;
+            border: 1px solid black;
+            display: none; /* 畫布將保持隱藏，直到圖片被加載後顯示 */
+        }
+    </style>
+</head>
+<body>
+    <h1></h1>
+    <input type="file" id="fileInput" accept="image/*" />
+    <br>
+    <button id="binaryButton">Binary</button>
+    <button id="ditherButton">Dither</button>
+    <button id="fsButton">Floyd–Steinberg</button>
+    <br>
+    <canvas id="canvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        let imageData, originalData;
+
+        document.getElementById('fileInput').addEventListener('change', function(e) {
+            const file = e.target.files[0];
+            const img = new Image();
+
+            const reader = new FileReader();
+            reader.onload = function(event) {
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+
+            img.onload = function() {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.style.display = 'block'; // 圖片加載後顯示畫布
+                ctx.drawImage(img, 0, 0); // 根據圖片尺寸繪製
+
+                imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                originalData = new Uint8ClampedArray(imageData.data); // 保存原始圖像數據
+            };
+        });
+
+        function convertToBinary() {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                const binaryColor = gray >= 128 ? 255 : 0;
+                data[i] = data[i + 1] = data[i + 2] = binaryColor;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function applyDithering() {
+            const data = imageData.data;
+            for (let i = 0; i < data.length; i += 4) {
+                const gray = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                const ditheredColor = Math.random() > gray / 255 ? 0 : 255;
+                data[i] = data[i + 1] = data[i + 2] = ditheredColor;
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        function floydSteinbergDithering() {
+            const data = imageData.data;
+            const width = canvas.width;
+            const height = canvas.height;
+
+            function pixelIndex(x, y) {
+                return (y * width + x) * 4;
+            }
+
+            for (let y = 0; y < height; y++) {
+                for (let x = 0; x < width; x++) {
+                    const i = pixelIndex(x, y);
+                    const oldPixel = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+                    const newPixel = oldPixel > 128 ? 255 : 0;
+                    const error = oldPixel - newPixel;
+                    data[i] = data[i + 1] = data[i + 2] = newPixel;
+
+                    if (x + 1 < width) {
+                        const right = pixelIndex(x + 1, y);
+                        data[right] += error * 7 / 16;
+                    }
+                    if (x - 1 >= 0 && y + 1 < height) {
+                        const bottomLeft = pixelIndex(x - 1, y + 1);
+                        data[bottomLeft] += error * 3 / 16;
+                    }
+                    if (y + 1 < height) {
+                        const bottom = pixelIndex(x, y + 1);
+                        data[bottom] += error * 5 / 16;
+                    }
+                    if (x + 1 < width && y + 1 < height) {
+                        const bottomRight = pixelIndex(x + 1, y + 1);
+                        data[bottomRight] += error * 1 / 16;
+                    }
+                }
+            }
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        document.getElementById('binaryButton').addEventListener('click', () => {
+            imageData.data.set(originalData); // 重置圖像為原始數據
+            convertToBinary();
+        });
+
+        document.getElementById('ditherButton').addEventListener('click', () => {
+            imageData.data.set(originalData); // 重置圖像為原始數據
+            applyDithering();
+        });
+
+        document.getElementById('fsButton').addEventListener('click', () => {
+            imageData.data.set(originalData); // 重置圖像為原始數據
+            floydSteinbergDithering();
+        });
+    </script>
+</body>
+</html>

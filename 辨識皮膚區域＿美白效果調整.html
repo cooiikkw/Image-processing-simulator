@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>圖像處理效果</title>
+    <style>
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 20px;
+        }
+        h1 {
+            margin-bottom: 16px;
+        }
+        /* 上方控制區塊置中 */
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 8px;
+        }
+        .container {
+            display: flex;
+            justify-content: center;
+            align-items: flex-end; /* 讓下面的文字對齊 */
+            margin-top: 20px;
+            width: 100%;
+            gap: 24px; /* 左右兩張圖的間距 */
+        }
+        #canvas {
+            display: none; /* 一開始隱藏處理後畫布 */
+        }
+        img {
+            display: none; /* 一開始隱藏原始圖片 */
+            max-width: 350px;
+        }
+        canvas {
+            max-width: 350px;
+        }
+        #upload {
+            border: none; /* 刪除未選取檔案前的框線 */
+        }
+        #effect {
+            display: none; /* 未選檔前，隱藏效果下拉式選單 */
+        }
+        #whitening-controls {
+            display: none; /* 預設隱藏美白滑桿及標籤 */
+        }
+        .label {
+            text-align: center;
+            margin-top: 4px;
+            display: none; /* 預設隱藏「原圖／效果後」文字 */
+        }
+    </style>
+</head>
+<body>
+    <h1>美白效果調整</h1>
+
+    <div class="controls">
+        <input type="file" id="upload" accept="image/*">
+
+        <!-- 效果選單：匯入圖片後才顯示 -->
+        <select id="effect">
+            <option value="">選擇效果</option>
+            <option value="skin-detection">皮膚區域辨識</option>
+            <option value="skin-whitening">皮膚美白</option>
+        </select>
+
+        <!-- 美白滑桿：只有選到皮膚美白時才顯示 -->
+        <div id="whitening-controls">
+            <label for="whitening-level">美白強度：</label>
+            <input type="range" id="whitening-level" min="0" max="100" value="50">
+        </div>
+    </div>
+    
+    <!-- 左右圖顯示區 -->
+    <div class="container">
+        <div>
+            <img id="originalImage">
+            <div class="label" id="originalLabel">原圖</div>
+        </div>
+        <div>
+            <canvas id="canvas"></canvas>
+            <div class="label" id="effectLabel">效果後</div>
+        </div>
+    </div>
+
+    <script>
+        const upload = document.getElementById('upload');
+        const effectSelect = document.getElementById('effect');
+        const whiteningControls = document.getElementById('whitening-controls');
+        const whiteningLevel = document.getElementById('whitening-level');
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const originalImage = document.getElementById('originalImage');
+        const originalLabel = document.getElementById('originalLabel');
+        const effectLabel = document.getElementById('effectLabel');
+
+        let img = new Image();
+
+        // 匯入圖片
+        upload.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    img.src = event.target.result;
+                };
+                reader.readAsDataURL(file);
+            }
+        });
+
+        img.onload = () => {
+            // 調整畫布與圖片大小一致
+            canvas.width = img.width;
+            canvas.height = img.height;
+
+            // 顯示原圖
+            originalImage.src = img.src;
+            originalImage.style.display = 'block';
+
+            // 一開始只顯示左邊原圖，隱藏右邊畫布
+            canvas.style.display = 'none';
+
+            // 重置選單與控制項
+            effectSelect.selectedIndex = 0;
+            effectSelect.style.display = 'block';
+            whiteningControls.style.display = 'none';
+            originalLabel.style.display = 'none';
+            effectLabel.style.display = 'none';
+        };
+
+        // 選擇效果
+        effectSelect.addEventListener('change', () => {
+            const effect = effectSelect.value;
+
+            if (!effect) {
+                // 沒有選效果：只顯示原圖，隱藏畫布與標籤與滑桿
+                canvas.style.display = 'none';
+                whiteningControls.style.display = 'none';
+                originalLabel.style.display = 'none';
+                effectLabel.style.display = 'none';
+                return;
+            }
+
+            // 有選效果：顯示畫布與標籤
+            canvas.style.display = 'block';
+            originalLabel.style.display = 'block';
+            effectLabel.style.display = 'block';
+
+            // 只有選到「皮膚美白」才顯示滑桿
+            if (effect === 'skin-whitening') {
+                whiteningControls.style.display = 'block';
+            } else {
+                whiteningControls.style.display = 'none';
+            }
+
+            applyEffect(effect);
+        });
+
+        // 美白強度滑桿變化時重新套用效果
+        whiteningLevel.addEventListener('input', () => {
+            if (effectSelect.value === 'skin-whitening') {
+                applyEffect('skin-whitening');
+            }
+        });
+
+        function applyEffect(effect) {
+            // 先畫上原圖
+            ctx.drawImage(img, 0, 0);
+
+            const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+            const data = imageData.data;
+
+            switch (effect) {
+                case 'skin-detection':
+                    applySkinDetection(data);
+                    break;
+                case 'skin-whitening':
+                    applySkinWhitening(data, whiteningLevel.value);
+                    break;
+                default:
+                    return;
+            }
+
+            ctx.putImageData(imageData, 0, 0);
+        }
+
+        // 皮膚區域辨識（輸出黑白圖）
+        function applySkinDetection(data) {
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // 簡單的皮膚顏色檢測條件（RGB 空間）
+                if (
+                    r > 95 && g > 40 && b > 20 &&
+                    Math.max(r, g, b) - Math.min(r, g, b) > 15 &&
+                    Math.abs(r - g) > 15 && r > g && r > b
+                ) {
+                    // 皮膚區域 -> 白色
+                    data[i] = 255;
+                    data[i + 1] = 255;
+                    data[i + 2] = 255;
+                } else {
+                    // 非皮膚區域 -> 黑色
+                    data[i] = 0;
+                    data[i + 1] = 0;
+                    data[i + 2] = 0;
+                }
+            }
+        }
+
+        // RGB ↔ YCbCr 轉換
+        function rgbToYcbcr(r, g, b) {
+            const y  = 0.299 * r + 0.587 * g + 0.114 * b;
+            const cb = 128 - 0.168736 * r - 0.331364 * g + 0.5 * b;
+            const cr = 128 + 0.5 * r - 0.5 * g - 0.081312 * b;
+            return { y, cb, cr };
+        }
+
+        function ycbcrToRgb(y, cb, cr) {
+            const r = y + 1.402 * (cr - 128);
+            const g = y - 0.344136 * (cb - 128) - 0.714136 * (cr - 128);
+            const b = y + 1.772 * (cb - 128);
+            return {
+                r: Math.min(255, Math.max(0, r)),
+                g: Math.min(255, Math.max(0, g)),
+                b: Math.min(255, Math.max(0, b))
+            };
+        }
+
+        // 皮膚美白
+        function applySkinWhitening(data, level) {
+            const whiteningFactor = level / 100; // 0 ~ 1
+
+            for (let i = 0; i < data.length; i += 4) {
+                const r = data[i];
+                const g = data[i + 1];
+                const b = data[i + 2];
+
+                // 轉 YCbCr
+                const { y, cb, cr } = rgbToYcbcr(r, g, b);
+
+                // 以 YCbCr 範圍判斷皮膚區域
+                if (y > 80 && cb > 77 && cb < 127 && cr > 133 && cr < 173) {
+                    // 提升亮度（避免太誇張，乘以 0.5）
+                    const newY = Math.min(255, y + (255 - y) * whiteningFactor * 0.5);
+
+                    // 轉回 RGB
+                    const { r: newR, g: newG, b: newB } = ycbcrToRgb(newY, cb, cr);
+
+                    // 原色與新色做插值，讓過渡比較柔和
+                    data[i]     = r * (1 - whiteningFactor) + newR * whiteningFactor;
+                    data[i + 1] = g * (1 - whiteningFactor) + newG * whiteningFactor;
+                    data[i + 2] = b * (1 - whiteningFactor) + newB * whiteningFactor;
+                }
+            }
+        }
+    </script>
+</body>
+</html>
