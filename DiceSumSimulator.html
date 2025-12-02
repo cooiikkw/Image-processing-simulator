@@ -1,0 +1,136 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8" />
+  <title>骰子總和模擬</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      padding: 20px;
+    }
+    table {
+      margin: 20px auto;
+      border-collapse: collapse;
+    }
+    th, td {
+      border: 1px solid #444;
+      padding: 6px 10px;
+    }
+    input {
+      margin: 0 6px;
+      font-size: 1rem;
+      width: 80px;
+    }
+  </style>
+</head>
+<body>
+  <h1>🎲 骰子總和模擬</h1>
+  <div>
+    骰子面數：
+    <input type="number" id="faceCount" value="6" min="2" />
+    骰子數量：
+    <input type="number" id="diceCount" value="6" min="1" />
+    擲骰次數：
+    <input type="number" id="throwCount" value="48" min="1" />
+    <button onclick="simulate()">擲出！</button>
+  </div>
+
+  <table id="resultTable">
+    <thead>
+      <tr>
+        <th>Total</th>
+        <th>Times</th>
+        <th>Graph</th>
+      </tr>
+    </thead>
+    <tbody></tbody>
+  </table>
+
+  <div id="pagination" style="margin-top: 20px;"></div>
+
+  <script>
+    const pageSize = 10;
+    let tableData = [];
+
+    function simulate() {
+      const faceCount = parseInt(document.getElementById('faceCount').value);
+      const diceCount = parseInt(document.getElementById('diceCount').value);
+      const throwCount = parseInt(document.getElementById('throwCount').value);
+
+      const map = {}; // 儲存每個總和出現的次數
+
+      for (let i = 0; i < throwCount; i++) {
+        let sum = 0;
+        for (let j = 0; j < diceCount; j++) {
+          sum += Math.floor(Math.random() * faceCount) + 1;
+        }
+        map[sum] = (map[sum] || 0) + 1;
+      }
+
+      tableData = Object.keys(map)
+        .map(key => ({
+          total: parseInt(key),
+          times: map[key],
+          graph: '*'.repeat(map[key])
+        }))
+        .sort((a, b) => a.total - b.total);
+
+      renderTable(1);
+    }
+
+    function renderTable(page) {
+      const tbody = document.querySelector("#resultTable tbody");
+      tbody.innerHTML = "";
+
+      const start = (page - 1) * pageSize;
+      const end = Math.min(start + pageSize, tableData.length);
+      for (let i = start; i < end; i++) {
+        const row = tableData[i];
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${row.total}</td><td>${row.times}</td><td>${row.graph}</td>`;
+        tbody.appendChild(tr);
+      }
+
+      renderPagination(page);
+    }
+
+    function renderPagination(currentPage) {
+      const pageCount = Math.ceil(tableData.length / pageSize);
+      const container = document.getElementById("pagination");
+      container.innerHTML = "";
+
+      const first = document.createElement("button");
+      first.innerText = "第一頁";
+      first.onclick = () => renderTable(1);
+      container.appendChild(first);
+
+      const prev = document.createElement("button");
+      prev.innerText = "上一頁";
+      prev.onclick = () => renderTable(Math.max(1, currentPage - 1));
+      container.appendChild(prev);
+
+      const select = document.createElement("select");
+      for (let i = 1; i <= pageCount; i++) {
+        const option = document.createElement("option");
+        option.value = i;
+        option.innerText = `第 ${i} 頁`;
+        if (i === currentPage) option.selected = true;
+        select.appendChild(option);
+      }
+      select.onchange = (e) => renderTable(parseInt(e.target.value));
+      container.appendChild(select);
+
+      const next = document.createElement("button");
+      next.innerText = "下一頁";
+      next.onclick = () => renderTable(Math.min(pageCount, currentPage + 1));
+      container.appendChild(next);
+
+      const last = document.createElement("button");
+      last.innerText = "最後一頁";
+      last.onclick = () => renderTable(pageCount);
+      container.appendChild(last);
+    }
+  </script>
+</body>
+</html>
